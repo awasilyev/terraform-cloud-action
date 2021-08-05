@@ -1,0 +1,35 @@
+name: "Terraform Cloud"
+description: "Trigger a Terraform Cloud run"
+inputs:
+  tfe-token:
+    description: "The API token granting access to communicate with Terraform Cloud"
+    required: true
+  organization:
+    description: "The organization name containing the workspace to trigger"
+    required: true
+  workspace:
+    description: "The workspace nameto trigger"
+    required: true
+  message:
+    description: "The message to be associated with this run"
+    required: false
+    default: "Triggered via terraform-cloud-action GitHub Action"
+  url:
+    description: "The location of the Terraform Cloud installation"
+    required: false
+    default: "https://app.terraform.io"
+outputs:
+  run-url:
+    description: "The URL to view the completed run"
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - ${{ inputs.tfe-token }}
+    - ${{ inputs.organization }}
+    - ${{ inputs.workspace }}
+    - ${{ inputs.message }}
+    - ${{ inputs.url }}
+branding:
+  color: blue
+  icon: upload-cloud

@@ -1,5 +1,5 @@
-name: "Terraform Cloud"
-description: "Trigger a Terraform Cloud run"
+name: "Terraform Cloud/Enterprise Action"
+description: "Trigger a Terraform Cloud or Terraform Enterprise run"
 inputs:
   tfe-token:
     description: "The API token granting access to communicate with Terraform Cloud"
@@ -27,6 +27,8 @@ inputs:
     required: false
     default: "true"
 outputs:
+  run-id:
+    description: "The ID of the created run"
   run-url:
     description: "The URL to view the run"
 runs:

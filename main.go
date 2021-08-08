@@ -91,6 +91,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("unable to create run: %w", err)
 	}
 	runURL := fmt.Sprintf("%s/app/%s/workspaces/%s/runs/%s", url, organization, workspace, r.ID)
+	fmt.Println("::set-output name=run-id::" + r.ID)
 	fmt.Println("::set-output name=run-url::" + runURL)
 	fmt.Println("Run URL: " + runURL)
 
@@ -105,19 +106,23 @@ func run(ctx context.Context, args []string) error {
 			return ctx.Err()
 		case <-time.After(maximumTimeout):
 			return fmt.Errorf("run timed out")
-		case <-time.After(time.Second * 2):
+		case <-time.After(time.Second * 5):
 			fmt.Println("Checking in on run status...")
 			checkin, err := client.Runs.Read(ctx, r.ID)
 			if err != nil {
-				return fmt.Errorf("unable to find created run: %w", err)
+				return fmt.Errorf("unable to find run %q: %w", r.ID, err)
 			}
 
 			switch checkin.Status {
 			case tfe.RunApplied, tfe.RunPlannedAndFinished:
 				fmt.Println("run finished successfully")
 				return nil
-			case tfe.RunCanceled, tfe.RunDiscarded, tfe.RunErrored:
-				return fmt.Errorf("run did not complete successfully")
+			case tfe.RunCanceled:
+				return fmt.Errorf("run was canceled")
+			case tfe.RunDiscarded:
+				return fmt.Errorf("run was discarded")
+			case tfe.RunErrored:
+				return fmt.Errorf("run encountered an error")
 			}
 
 			// RunApplyQueued        RunStatus = "apply_queued"

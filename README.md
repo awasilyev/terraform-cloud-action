@@ -49,9 +49,13 @@ Regardless of the `wait` setting this Action defines a 60 minute timeout on its 
 
 ## Outputs
 
+### `run-id`
+
+The ID of the created run.
+
 ### `run-url`
 
-The URL to view the completed run.
+The URL to view the run.
 
 ## Example usage
 

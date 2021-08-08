@@ -6,12 +6,11 @@ WORKDIR /app
 RUN go mod download
 
 COPY . /app
-ENV CGO_ENABLED=0
-RUN go build -o main
+RUN CGO_ENABLED=0 go build -o main
 
 # ---
 # Container image that runs your code
-FROM alpine:3.12
+FROM alpine:3.14
 
 # Copies your code file from your action repository to the filesystem path `/` of the container
 COPY --from=build /app/main /app

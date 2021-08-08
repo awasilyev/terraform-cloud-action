@@ -8,8 +8,12 @@ inputs:
     description: "The organization name containing the workspace to trigger"
     required: true
   workspace:
-    description: "The workspace nameto trigger"
+    description: "The workspace name to trigger"
     required: true
+  json-vars:
+    description: "JSON-encoded list of variables to update the workspace before triggering the run"
+    required: false
+    default: "[]"
   message:
     description: "The message to be associated with this run"
     required: false
@@ -18,18 +22,16 @@ inputs:
     description: "The location of the Terraform Cloud installation"
     required: false
     default: "https://app.terraform.io"
+  wait:
+    description: "If true, will block until the run is marked as completed"
+    required: false
+    default: "true"
 outputs:
   run-url:
-    description: "The URL to view the completed run"
+    description: "The URL to view the run"
 runs:
   using: "docker"
   image: "Dockerfile"
-  args:
-    - ${{ inputs.tfe-token }}
-    - ${{ inputs.organization }}
-    - ${{ inputs.workspace }}
-    - ${{ inputs.message }}
-    - ${{ inputs.url }}
 branding:
   color: blue
   icon: upload-cloud

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,6 +10,26 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 )
+
+var (
+	tfeToken     = os.Getenv("INPUT_TFE-TOKEN")
+	organization = os.Getenv("INPUT_ORGANIZATION")
+	workspace    = os.Getenv("INPUT_WORKSPACE")
+	jsonVars     = os.Getenv("INPUT_JSON-VARS")
+	message      = os.Getenv("INPUT_MESSAGE")
+	url          = os.Getenv("INPUT_URL")
+	wait         = os.Getenv("INPUT_WAIT")
+)
+
+const maximumTimeout = time.Minute * 60
+
+type workspaceVar struct {
+	Key         string  `json:"key"`
+	Value       string  `json:"value"`
+	Description *string `json:"description"`
+	HCL         *bool   `json:"hcl"`
+	Sensitive   *bool   `json:"sensitive"`
+}
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -20,16 +41,17 @@ func main() {
 	}
 }
 
+func parseVars() ([]workspaceVar, error) {
+	ret := []workspaceVar{}
+	err := json.Unmarshal([]byte(jsonVars), &ret)
+	return ret, err
+}
+
 func run(ctx context.Context, args []string) error {
-	// Parse args
-	if len(args) < 5 {
-		return fmt.Errorf("insufficient arguments supplied")
+	vars, err := parseVars()
+	if err != nil {
+		return fmt.Errorf("could not decode json-vars. Make sure that this is a key-value dictionary of vars to be set: %w", err)
 	}
-	tfeToken := args[0]
-	organization := args[1]
-	workspace := args[2]
-	message := args[3]
-	url := args[4]
 
 	// Build client
 	cfg := tfe.DefaultConfig()
@@ -46,6 +68,19 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not read workspace: %w", err)
 	}
 
+	// Update the workspace vars
+	for _, v := range vars {
+		_, err = client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
+			Value:       &v.Value,
+			Description: v.Description,
+			HCL:         v.HCL,
+			Sensitive:   v.Sensitive,
+		})
+		if err != nil {
+			return fmt.Errorf("could not update variable %q: %w", v.Key, err)
+		}
+	}
+
 	// Get a run going!
 	r, err := client.Runs.Create(ctx, tfe.RunCreateOptions{
 		Workspace: w,
@@ -55,14 +90,23 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("unable to create run: %w", err)
 	}
-	fmt.Printf("::set-output name=run-url::%s/app/%s/workspaces/%s/runs/%s\n", url, organization, workspace, r.ID)
+	runURL := fmt.Sprintf("%s/app/%s/workspaces/%s/runs/%s", url, organization, workspace, r.ID)
+	fmt.Println("::set-output name=run-url::" + runURL)
+	fmt.Println("Run URL: " + runURL)
+
+	if wait != "true" {
+		return nil
+	}
+	fmt.Println("Waiting for run to complete")
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-time.After(maximumTimeout):
+			return fmt.Errorf("run timed out")
 		case <-time.After(time.Second * 2):
-			fmt.Println("checking in on run status")
+			fmt.Println("Checking in on run status...")
 			checkin, err := client.Runs.Read(ctx, r.ID)
 			if err != nil {
 				return fmt.Errorf("unable to find created run: %w", err)

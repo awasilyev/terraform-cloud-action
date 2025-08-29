@@ -134,19 +134,27 @@ func run(ctx context.Context, args []string) error {
 					Category:  &category,
 				}
 				
+				// Set default values for required fields if they're nil
+				hcl := false
+				sensitive := false
+				if v.HCL != nil {
+					hcl = *v.HCL
+				}
+				if v.Sensitive != nil {
+					sensitive = *v.Sensitive
+				}
+				
+				createOpts.HCL = &hcl
+				createOpts.Sensitive = &sensitive
+				
 				// Only add optional fields if they're not nil
 				if v.Description != nil {
 					createOpts.Description = v.Description
 				}
-				if v.HCL != nil {
-					createOpts.HCL = v.HCL
-				}
-				if v.Sensitive != nil {
-					createOpts.Sensitive = v.Sensitive
-				}
 				
 				// Debug: show final create options
-				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q\n", *createOpts.Key, *createOpts.Value, *createOpts.Category)
+				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
+					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
 				
 				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {

@@ -95,14 +95,26 @@ func run(ctx context.Context, args []string) error {
 			if isVariableNotFoundError(err) {
 				// Variable doesn't exist, create it
 				category := tfe.CategoryTerraform // Use the proper TFE type
-				_, err = client.Variables.Create(ctx, w.ID, tfe.VariableCreateOptions{
-					Key:         &v.Key,
-					Value:       &v.Value,
-					Description: v.Description,
-					HCL:         v.HCL,
-					Sensitive:   v.Sensitive,
-					Category:    &category,
-				})
+				
+				// Build create options with proper nil handling
+				createOpts := tfe.VariableCreateOptions{
+					Key:       &v.Key,
+					Value:     &v.Value,
+					Category:  &category,
+				}
+				
+				// Only add optional fields if they're not nil
+				if v.Description != nil {
+					createOpts.Description = v.Description
+				}
+				if v.HCL != nil {
+					createOpts.HCL = v.HCL
+				}
+				if v.Sensitive != nil {
+					createOpts.Sensitive = v.Sensitive
+				}
+				
+				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {
 					// Check if the error is due to the variable already existing
 					if err.Error() == "Key has already been taken" {

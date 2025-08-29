@@ -131,6 +131,11 @@ func run(ctx context.Context, args []string) error {
 		fmt.Printf("Debug: Found %d existing variables in workspace\n", existingVars.TotalCount)
 	}
 
+	// Debug: check workspace state and permissions
+	fmt.Printf("Debug: Workspace State: %s\n", w.State)
+	fmt.Printf("Debug: Workspace Locked: %v\n", w.Locked)
+	fmt.Printf("Debug: Workspace Auto Apply: %v\n", w.AutoApply)
+
 	// Update the workspace vars
 	for _, v := range vars {
 		// First try to read the existing variable
@@ -162,17 +167,30 @@ func run(ctx context.Context, args []string) error {
 					isHCL = containsHCLSyntax(valueStr)
 				}
 				
-				// Try with minimal required fields first
+				// Set default values for all fields (matching the test pattern)
+				hcl := isHCL
+				sensitive := false
+				if v.Sensitive != nil {
+					sensitive = *v.Sensitive
+				}
+				
+				// Try with all fields explicitly set (matching the test examples)
 				createOpts := tfe.VariableCreateOptions{
-					Key:      &v.Key,
-					Value:    &valueStr,
-					Category: &category,
-					HCL:      &isHCL,
+					Key:       &v.Key,
+					Value:     &valueStr,
+					Category:  &category,
+					HCL:       &hcl,
+					Sensitive: &sensitive,
+				}
+				
+				// Add description if provided
+				if v.Description != nil {
+					createOpts.Description = v.Description
 				}
 				
 				// Debug: show final create options
-				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v\n", 
-					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL)
+				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
+					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
 				
 				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {

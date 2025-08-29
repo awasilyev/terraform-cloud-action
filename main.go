@@ -173,43 +173,26 @@ func run(ctx context.Context, args []string) error {
 					sensitive = *v.Sensitive
 				}
 				
-				// Try with minimal fields first to isolate the issue
-				fmt.Printf("Debug: Attempting minimal variable creation...\n")
-				minimalOpts := tfe.VariableCreateOptions{
-					Key:      &v.Key,
-					Value:    &valueStr,
-					Category: &category,
+				// Try with TFE helper functions to see if that resolves the issue
+				fmt.Printf("Debug: Attempting variable creation with TFE helper functions...\n")
+				createOpts := tfe.VariableCreateOptions{
+					Key:       tfe.String(v.Key),
+					Value:     tfe.String(valueStr),
+					Category:  tfe.Category(tfe.CategoryTerraform),
+					HCL:       tfe.Bool(hcl),
+					Sensitive: tfe.Bool(sensitive),
 				}
 				
-				// Try minimal creation first
-				_, minimalErr := client.Variables.Create(ctx, w.ID, minimalOpts)
-				if minimalErr != nil {
-					fmt.Printf("Debug: Minimal creation failed: %v\n", minimalErr)
-					
-					// Now try with full options
-					fmt.Printf("Debug: Attempting full variable creation...\n")
-					createOpts := tfe.VariableCreateOptions{
-						Key:       &v.Key,
-						Value:     &valueStr,
-						Category:  &category,
-						HCL:       &hcl,
-						Sensitive: &sensitive,
-					}
-					
-					// Add description if provided
-					if v.Description != nil {
-						createOpts.Description = v.Description
-					}
-					
-					// Debug: show final create options
-					fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
-						*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
-					
-					_, err = client.Variables.Create(ctx, w.ID, createOpts)
-				} else {
-					fmt.Printf("Debug: Minimal creation succeeded!\n")
-					err = nil
+				// Add description if provided
+				if v.Description != nil {
+					createOpts.Description = v.Description
 				}
+				
+				// Debug: show final create options
+				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
+					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
+				
+				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				
 				if err != nil {
 					// Debug: show detailed error information

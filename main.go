@@ -97,12 +97,6 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not decode json-vars. Make sure that this is a key-value dictionary of vars to be set: %w", err)
 	}
 
-	// Debug: show what we parsed
-	fmt.Printf("Debug: Parsed %d variables from JSON input\n", len(vars))
-	for i, v := range vars {
-		fmt.Printf("Debug: Variable %d: Key=%q, Value=%v (type: %T)\n", i, v.Key, v.Value, v.Value)
-	}
-
 	// Build client
 	cfg := tfe.DefaultConfig()
 	cfg.Address = url
@@ -118,41 +112,11 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not read workspace: %w", err)
 	}
 
-	// Debug: show workspace details
-	fmt.Printf("Debug: Workspace ID: %s, Name: %s\n", w.ID, w.Name)
-	fmt.Printf("Debug: Workspace Terraform Version: %s\n", w.TerraformVersion)
-	fmt.Printf("Debug: Workspace Execution Mode: %s\n", w.ExecutionMode)
-
-	// Debug: try to list existing variables
-	existingVars, listErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
-	if listErr != nil {
-		fmt.Printf("Debug: Could not list existing variables: %v\n", listErr)
-	} else {
-		fmt.Printf("Debug: Found %d existing variables in workspace\n", existingVars.TotalCount)
-	}
-
-	// Debug: check workspace state and permissions
-	fmt.Printf("Debug: Workspace Locked: %v\n", w.Locked)
-	fmt.Printf("Debug: Workspace Auto Apply: %v\n", w.AutoApply)
-	
-	// Debug: check if workspace has any special constraints
-	fmt.Printf("Debug: Workspace Operations: %v\n", w.Operations)
-	fmt.Printf("Debug: Workspace Execution Mode: %s\n", w.ExecutionMode)
-	fmt.Printf("Debug: Workspace Terraform Version: %s\n", w.TerraformVersion)
-	
-	// Debug: try to get current state version to see workspace status
-	if w.CurrentStateVersion != nil {
-		fmt.Printf("Debug: Current State Version: %s\n", w.CurrentStateVersion.ID)
-	} else {
-		fmt.Printf("Debug: No current state version\n")
-	}
-
 	// Update the workspace vars
 	for _, v := range vars {
 		// Check if variable exists by listing variables and searching for the key
 		existingVars, listErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
 		if listErr != nil {
-			fmt.Printf("Debug: Could not list variables: %v\n", listErr)
 			return fmt.Errorf("could not list variables: %w", listErr)
 		}
 		
@@ -171,10 +135,6 @@ func run(ctx context.Context, args []string) error {
 			// Convert value to string for TFE
 			valueStr := convertValueToString(v.Value)
 			
-			// Debug: show what we're trying to create
-			fmt.Printf("Debug: Creating variable %q with value: %q (type: %T)\n", v.Key, valueStr, v.Value)
-			fmt.Printf("Debug: Description: %v, HCL: %v, Sensitive: %v\n", v.Description, v.HCL, v.Sensitive)
-			
 			// Detect if this should be treated as HCL (complex values with brackets, braces, etc.)
 			isHCL := false
 			if v.HCL != nil {
@@ -192,8 +152,7 @@ func run(ctx context.Context, args []string) error {
 				sensitive = *v.Sensitive
 			}
 			
-			// Try with TFE helper functions to see if that resolves the issue
-			fmt.Printf("Debug: Attempting variable creation with TFE helper functions...\n")
+			// Create variable with TFE helper functions
 			createOpts := tfe.VariableCreateOptions{
 				Key:       tfe.String(v.Key),
 				Value:     tfe.String(valueStr),
@@ -207,17 +166,9 @@ func run(ctx context.Context, args []string) error {
 				createOpts.Description = v.Description
 			}
 			
-			// Debug: show final create options
-			fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
-				*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
-			
 			_, err = client.Variables.Create(ctx, w.ID, createOpts)
 			
 			if err != nil {
-				// Debug: show detailed error information
-				fmt.Printf("Debug: Create error details: %T: %v\n", err, err)
-				fmt.Printf("Debug: Error string: %q\n", err.Error())
-				
 				// Check if the error is due to the variable already existing
 				if err.Error() == "Key has already been taken" {
 					// Variable was created by another process, try to update it instead

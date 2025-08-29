@@ -106,6 +106,19 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not read workspace: %w", err)
 	}
 
+	// Debug: show workspace details
+	fmt.Printf("Debug: Workspace ID: %s, Name: %s\n", w.ID, w.Name)
+	fmt.Printf("Debug: Workspace Terraform Version: %s\n", w.TerraformVersion)
+	fmt.Printf("Debug: Workspace Execution Mode: %s\n", w.ExecutionMode)
+
+	// Debug: try to list existing variables
+	existingVars, listErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
+	if listErr != nil {
+		fmt.Printf("Debug: Could not list existing variables: %v\n", listErr)
+	} else {
+		fmt.Printf("Debug: Found %d existing variables in workspace\n", existingVars.TotalCount)
+	}
+
 	// Update the workspace vars
 	for _, v := range vars {
 		// First try to read the existing variable
@@ -140,6 +153,10 @@ func run(ctx context.Context, args []string) error {
 				
 				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {
+					// Debug: show detailed error information
+					fmt.Printf("Debug: Create error details: %T: %v\n", err, err)
+					fmt.Printf("Debug: Error string: %q\n", err.Error())
+					
 					// Check if the error is due to the variable already existing
 					if err.Error() == "Key has already been taken" {
 						// Variable was created by another process, try to update it instead

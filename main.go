@@ -132,7 +132,6 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	// Debug: check workspace state and permissions
-	fmt.Printf("Debug: Workspace State: %s\n", w.State)
 	fmt.Printf("Debug: Workspace Locked: %v\n", w.Locked)
 	fmt.Printf("Debug: Workspace Auto Apply: %v\n", w.AutoApply)
 

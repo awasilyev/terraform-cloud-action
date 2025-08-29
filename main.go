@@ -147,7 +147,6 @@ func run(ctx context.Context, args []string) error {
 			// TFE typically returns a 404 or specific error for non-existent variables
 			if isVariableNotFoundError(err) {
 				// Variable doesn't exist, create it
-				category := tfe.CategoryTerraform // Use the proper TFE type
 				
 				// Convert value to string for TFE
 				valueStr := convertValueToString(v.Value)

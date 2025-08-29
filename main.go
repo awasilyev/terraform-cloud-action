@@ -272,11 +272,22 @@ func run(ctx context.Context, args []string) error {
 		}
 	}
 
+	// Create a configuration version (required before creating a run)
+	fmt.Println("Creating configuration version...")
+	cv, err := client.ConfigurationVersions.Create(ctx, w.ID, tfe.ConfigurationVersionCreateOptions{
+		AutoQueueRuns: tfe.Bool(false),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to create configuration version: %w", err)
+	}
+	fmt.Printf("Configuration version created: %s\n", cv.ID)
+
 	// Get a run going!
 	r, err := client.Runs.Create(ctx, tfe.RunCreateOptions{
-		Workspace: w,
-		Refresh:   tfe.Bool(true),
-		Message:   &message,
+		Workspace:            w,
+		ConfigurationVersion: cv,
+		Refresh:              tfe.Bool(true),
+		Message:              &message,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to create run: %w", err)

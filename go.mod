@@ -1,4 +1,4 @@
-module github.com/taiidani/terraform-cloud-action
+module github.com/awasilyev/terraform-cloud-action
 
 go 1.16
 

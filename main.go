@@ -23,6 +23,20 @@ var (
 
 const maximumTimeout = time.Minute * 60
 
+// isVariableNotFoundError checks if the error indicates a variable was not found
+func isVariableNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	// Check for common TFE "not found" error patterns
+	errStr := err.Error()
+	return errStr == "resource not found" || 
+		   errStr == "variable not found" ||
+		   errStr == "404" ||
+		   errStr == "not found"
+}
+
 type workspaceVar struct {
 	Key         string  `json:"key"`
 	Value       string  `json:"value"`
@@ -70,14 +84,62 @@ func run(ctx context.Context, args []string) error {
 
 	// Update the workspace vars
 	for _, v := range vars {
-		_, err = client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
-			Value:       &v.Value,
-			Description: v.Description,
-			HCL:         v.HCL,
-			Sensitive:   v.Sensitive,
-		})
+		// First try to read the existing variable
+		_, err := client.Variables.Read(ctx, w.ID, v.Key)
 		if err != nil {
-			return fmt.Errorf("could not update variable %q: %w", v.Key, err)
+			// Debug: let's see what the actual error is
+			fmt.Printf("Debug: Read error for variable %q: %v\n", v.Key, err)
+			
+			// Check if the error indicates the variable doesn't exist
+			// TFE typically returns a 404 or specific error for non-existent variables
+			if isVariableNotFoundError(err) {
+				// Variable doesn't exist, create it
+				category := tfe.CategoryTerraform // Use the proper TFE type
+				_, err = client.Variables.Create(ctx, w.ID, tfe.VariableCreateOptions{
+					Key:         &v.Key,
+					Value:       &v.Value,
+					Description: v.Description,
+					HCL:         v.HCL,
+					Sensitive:   v.Sensitive,
+					Category:    &category,
+				})
+				if err != nil {
+					// Check if the error is due to the variable already existing
+					if err.Error() == "Key has already been taken" {
+						// Variable was created by another process, try to update it instead
+						fmt.Printf("Variable %q already exists, updating instead\n", v.Key)
+						_, updateErr := client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
+							Value:       &v.Value,
+							Description: v.Description,
+							HCL:         v.HCL,
+							Sensitive:   v.Sensitive,
+						})
+						if updateErr != nil {
+							return fmt.Errorf("could not update variable %q: %w", v.Key, updateErr)
+						}
+						fmt.Printf("Updated variable %q\n", v.Key)
+					} else {
+						return fmt.Errorf("could not create variable %q: %w", v.Key, err)
+					}
+				} else {
+					fmt.Printf("Created variable %q\n", v.Key)
+				}
+			} else {
+				// Some other error occurred, return it
+				return fmt.Errorf("error reading variable %q: %w", v.Key, err)
+			}
+		} else {
+			// Variable exists, update it
+			_, err = client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
+				Value:       &v.Value,
+				Description: v.Description,
+				HCL:         v.HCL,
+				Sensitive:   v.Sensitive,
+			})
+			if err != nil {
+				return fmt.Errorf("could not update variable %q: %w", v.Key, err)
+			}
+			fmt.Printf("Updated variable %q\n", v.Key)
 		}
 	}
 

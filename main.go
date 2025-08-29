@@ -223,20 +223,22 @@ func run(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Create a configuration version (required before creating a run)
-	fmt.Println("Creating configuration version...")
-	cv, err := client.ConfigurationVersions.Create(ctx, w.ID, tfe.ConfigurationVersionCreateOptions{
-		AutoQueueRuns: tfe.Bool(false),
-	})
+	// Use the latest configuration version instead of creating a new one
+	cv, err := client.ConfigurationVersions.List(ctx, w.ID, &tfe.ConfigurationVersionListOptions{})
 	if err != nil {
-		return fmt.Errorf("unable to create configuration version: %w", err)
+		return fmt.Errorf("unable to list configuration versions: %w", err)
 	}
-	fmt.Printf("Configuration version created: %s\n", cv.ID)
+	if len(cv.Items) == 0 {
+		return fmt.Errorf("no configuration versions found for workspace")
+	}
+	// Use the most recent configuration version
+	latestCV := cv.Items[0]
+	fmt.Printf("Using existing configuration version: %s\n", latestCV.ID)
 
 	// Get a run going!
 	r, err := client.Runs.Create(ctx, tfe.RunCreateOptions{
 		Workspace:            w,
-		ConfigurationVersion: cv,
+		ConfigurationVersion: latestCV,
 		Refresh:              tfe.Bool(true),
 		Message:              &message,
 	})

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
@@ -53,6 +54,17 @@ func convertValueToString(value interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// containsHCLSyntax detects if a string value contains HCL syntax
+func containsHCLSyntax(value string) bool {
+	// Check for common HCL patterns
+	return strings.Contains(value, "[") || 
+		   strings.Contains(value, "]") || 
+		   strings.Contains(value, "{") || 
+		   strings.Contains(value, "}") ||
+		   strings.Contains(value, "=") ||
+		   strings.Contains(value, ",")
 }
 
 type workspaceVar struct {
@@ -140,16 +152,27 @@ func run(ctx context.Context, args []string) error {
 				fmt.Printf("Debug: Creating variable %q with value: %q (type: %T)\n", v.Key, valueStr, v.Value)
 				fmt.Printf("Debug: Description: %v, HCL: %v, Sensitive: %v\n", v.Description, v.HCL, v.Sensitive)
 				
+				// Detect if this should be treated as HCL (complex values with brackets, braces, etc.)
+				isHCL := false
+				if v.HCL != nil {
+					isHCL = *v.HCL
+				} else {
+					// Auto-detect HCL for complex values
+					valueStr := convertValueToString(v.Value)
+					isHCL = containsHCLSyntax(valueStr)
+				}
+				
 				// Try with minimal required fields first
 				createOpts := tfe.VariableCreateOptions{
 					Key:      &v.Key,
 					Value:    &valueStr,
 					Category: &category,
+					HCL:      &isHCL,
 				}
 				
 				// Debug: show final create options
-				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q\n", 
-					*createOpts.Key, *createOpts.Value, *createOpts.Category)
+				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v\n", 
+					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL)
 				
 				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {

@@ -127,34 +127,16 @@ func run(ctx context.Context, args []string) error {
 				fmt.Printf("Debug: Creating variable %q with value: %q (type: %T)\n", v.Key, valueStr, v.Value)
 				fmt.Printf("Debug: Description: %v, HCL: %v, Sensitive: %v\n", v.Description, v.HCL, v.Sensitive)
 				
-				// Build create options with proper nil handling
+				// Try with minimal required fields first
 				createOpts := tfe.VariableCreateOptions{
-					Key:       &v.Key,
-					Value:     &valueStr,
-					Category:  &category,
-				}
-				
-				// Set default values for required fields if they're nil
-				hcl := false
-				sensitive := false
-				if v.HCL != nil {
-					hcl = *v.HCL
-				}
-				if v.Sensitive != nil {
-					sensitive = *v.Sensitive
-				}
-				
-				createOpts.HCL = &hcl
-				createOpts.Sensitive = &sensitive
-				
-				// Only add optional fields if they're not nil
-				if v.Description != nil {
-					createOpts.Description = v.Description
+					Key:      &v.Key,
+					Value:    &valueStr,
+					Category: &category,
 				}
 				
 				// Debug: show final create options
-				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
-					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
+				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q\n", 
+					*createOpts.Key, *createOpts.Value, *createOpts.Category)
 				
 				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {

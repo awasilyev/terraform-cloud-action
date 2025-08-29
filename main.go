@@ -37,12 +37,30 @@ func isVariableNotFoundError(err error) bool {
 		   errStr == "not found"
 }
 
+// convertValueToString converts the interface{} value to a string for TFE
+func convertValueToString(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case bool:
+		return fmt.Sprintf("%t", v)
+	case int, int8, int16, int32, int64:
+		return fmt.Sprintf("%d", v)
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", v)
+	case float32, float64:
+		return fmt.Sprintf("%f", v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
 type workspaceVar struct {
-	Key         string  `json:"key"`
-	Value       string  `json:"value"`
-	Description *string `json:"description"`
-	HCL         *bool   `json:"hcl"`
-	Sensitive   *bool   `json:"sensitive"`
+	Key         string      `json:"key"`
+	Value       interface{} `json:"value"`
+	Description *string     `json:"description"`
+	HCL         *bool       `json:"hcl"`
+	Sensitive   *bool       `json:"sensitive"`
 }
 
 func main() {
@@ -96,10 +114,13 @@ func run(ctx context.Context, args []string) error {
 				// Variable doesn't exist, create it
 				category := tfe.CategoryTerraform // Use the proper TFE type
 				
+				// Convert value to string for TFE
+				valueStr := convertValueToString(v.Value)
+				
 				// Build create options with proper nil handling
 				createOpts := tfe.VariableCreateOptions{
 					Key:       &v.Key,
-					Value:     &v.Value,
+					Value:     &valueStr,
 					Category:  &category,
 				}
 				
@@ -121,7 +142,7 @@ func run(ctx context.Context, args []string) error {
 						// Variable was created by another process, try to update it instead
 						fmt.Printf("Variable %q already exists, updating instead\n", v.Key)
 						_, updateErr := client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
-							Value:       &v.Value,
+							Value:       &valueStr,
 							Description: v.Description,
 							HCL:         v.HCL,
 							Sensitive:   v.Sensitive,
@@ -142,8 +163,9 @@ func run(ctx context.Context, args []string) error {
 			}
 		} else {
 			// Variable exists, update it
+			valueStr := convertValueToString(v.Value)
 			_, err = client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
-				Value:       &v.Value,
+				Value:       &valueStr,
 				Description: v.Description,
 				HCL:         v.HCL,
 				Sensitive:   v.Sensitive,

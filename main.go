@@ -67,6 +67,27 @@ func containsHCLSyntax(value string) bool {
 		   strings.Contains(value, ",")
 }
 
+// appendToFile appends a key-value pair to the GITHUB_OUTPUT file
+func appendToFile(filename, key, value string) error {
+	// Format: key<<<DELIMITER
+	// value
+	// DELIMITER
+	delimiter := "EOF"
+	content := fmt.Sprintf("%s<<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
+	
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open output file: %w", err)
+	}
+	defer file.Close()
+	
+	if _, err := file.WriteString(content); err != nil {
+		return fmt.Errorf("failed to write to output file: %w", err)
+	}
+	
+	return nil
+}
+
 type workspaceVar struct {
 	Key         string      `json:"key"`
 	Value       interface{} `json:"value"`
@@ -246,8 +267,17 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("unable to create run: %w", err)
 	}
 	runURL := fmt.Sprintf("%s/app/%s/workspaces/%s/runs/%s", url, organization, workspace, r.ID)
-	fmt.Println("::set-output name=run-id::" + r.ID)
-	fmt.Println("::set-output name=run-url::" + runURL)
+	// Write outputs to GITHUB_OUTPUT file for GitHub Actions
+	if outputFile := os.Getenv("GITHUB_OUTPUT"); outputFile != "" {
+		// Append run-id output
+		if err := appendToFile(outputFile, "run-id", r.ID); err != nil {
+			fmt.Printf("Warning: could not write run-id output: %v\n", err)
+		}
+		// Append run-url output
+		if err := appendToFile(outputFile, "run-url", runURL); err != nil {
+			fmt.Printf("Warning: could not write run-url output: %v\n", err)
+		}
+	}
 	fmt.Println("Run URL: " + runURL)
 
 	if wait != "true" {

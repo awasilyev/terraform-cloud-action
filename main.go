@@ -166,99 +166,95 @@ func run(ctx context.Context, args []string) error {
 		}
 		
 		if existingVar == nil {
-				// Variable doesn't exist, create it
-				
-				// Convert value to string for TFE
+			// Variable doesn't exist, create it
+			
+			// Convert value to string for TFE
+			valueStr := convertValueToString(v.Value)
+			
+			// Debug: show what we're trying to create
+			fmt.Printf("Debug: Creating variable %q with value: %q (type: %T)\n", v.Key, valueStr, v.Value)
+			fmt.Printf("Debug: Description: %v, HCL: %v, Sensitive: %v\n", v.Description, v.HCL, v.Sensitive)
+			
+			// Detect if this should be treated as HCL (complex values with brackets, braces, etc.)
+			isHCL := false
+			if v.HCL != nil {
+				isHCL = *v.HCL
+			} else {
+				// Auto-detect HCL for complex values
 				valueStr := convertValueToString(v.Value)
+				isHCL = containsHCLSyntax(valueStr)
+			}
+			
+			// Set default values for all fields (matching the test pattern)
+			hcl := isHCL
+			sensitive := false
+			if v.Sensitive != nil {
+				sensitive = *v.Sensitive
+			}
+			
+			// Try with TFE helper functions to see if that resolves the issue
+			fmt.Printf("Debug: Attempting variable creation with TFE helper functions...\n")
+			createOpts := tfe.VariableCreateOptions{
+				Key:       tfe.String(v.Key),
+				Value:     tfe.String(valueStr),
+				Category:  tfe.Category(tfe.CategoryTerraform),
+				HCL:       tfe.Bool(hcl),
+				Sensitive: tfe.Bool(sensitive),
+			}
+			
+			// Add description if provided
+			if v.Description != nil {
+				createOpts.Description = v.Description
+			}
+			
+			// Debug: show final create options
+			fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
+				*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
+			
+			_, err = client.Variables.Create(ctx, w.ID, createOpts)
+			
+			if err != nil {
+				// Debug: show detailed error information
+				fmt.Printf("Debug: Create error details: %T: %v\n", err, err)
+				fmt.Printf("Debug: Error string: %q\n", err.Error())
 				
-				// Debug: show what we're trying to create
-				fmt.Printf("Debug: Creating variable %q with value: %q (type: %T)\n", v.Key, valueStr, v.Value)
-				fmt.Printf("Debug: Description: %v, HCL: %v, Sensitive: %v\n", v.Description, v.HCL, v.Sensitive)
-				
-				// Detect if this should be treated as HCL (complex values with brackets, braces, etc.)
-				isHCL := false
-				if v.HCL != nil {
-					isHCL = *v.HCL
-				} else {
-					// Auto-detect HCL for complex values
-					valueStr := convertValueToString(v.Value)
-					isHCL = containsHCLSyntax(valueStr)
-				}
-				
-				// Set default values for all fields (matching the test pattern)
-				hcl := isHCL
-				sensitive := false
-				if v.Sensitive != nil {
-					sensitive = *v.Sensitive
-				}
-				
-				// Try with TFE helper functions to see if that resolves the issue
-				fmt.Printf("Debug: Attempting variable creation with TFE helper functions...\n")
-				createOpts := tfe.VariableCreateOptions{
-					Key:       tfe.String(v.Key),
-					Value:     tfe.String(valueStr),
-					Category:  tfe.Category(tfe.CategoryTerraform),
-					HCL:       tfe.Bool(hcl),
-					Sensitive: tfe.Bool(sensitive),
-				}
-				
-				// Add description if provided
-				if v.Description != nil {
-					createOpts.Description = v.Description
-				}
-				
-				// Debug: show final create options
-				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
-					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
-				
-				_, err = client.Variables.Create(ctx, w.ID, createOpts)
-				
-				if err != nil {
-					// Debug: show detailed error information
-					fmt.Printf("Debug: Create error details: %T: %v\n", err, err)
-					fmt.Printf("Debug: Error string: %q\n", err.Error())
-					
-					// Check if the error is due to the variable already existing
-					if err.Error() == "Key has already been taken" {
-						// Variable was created by another process, try to update it instead
-						fmt.Printf("Variable %q already exists, updating instead\n", v.Key)
-						// We need to get the variable ID first since Update requires it
-						updateVars, updateListErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
-						if updateListErr != nil {
-							return fmt.Errorf("could not list variables for update: %w", updateListErr)
-						}
-						
-						var updateVar *tfe.Variable
-						for _, ev := range updateVars.Items {
-							if ev.Key == v.Key {
-								updateVar = ev
-								break
-							}
-						}
-						
-						if updateVar == nil {
-							return fmt.Errorf("variable %q not found for update", v.Key)
-						}
-						
-						_, updateErr := client.Variables.Update(ctx, w.ID, updateVar.ID, tfe.VariableUpdateOptions{
-							Value:       &valueStr,
-							Description: v.Description,
-							HCL:         v.HCL,
-							Sensitive:   v.Sensitive,
-						})
-						if updateErr != nil {
-							return fmt.Errorf("could not update variable %q: %w", v.Key, updateErr)
-						}
-						fmt.Printf("Updated variable %q\n", v.Key)
-					} else {
-						return fmt.Errorf("could not create variable %q: %w", v.Key, err)
+				// Check if the error is due to the variable already existing
+				if err.Error() == "Key has already been taken" {
+					// Variable was created by another process, try to update it instead
+					fmt.Printf("Variable %q already exists, updating instead\n", v.Key)
+					// We need to get the variable ID first since Update requires it
+					updateVars, updateListErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
+					if updateListErr != nil {
+						return fmt.Errorf("could not list variables for update: %w", updateListErr)
 					}
+					
+					var updateVar *tfe.Variable
+					for _, ev := range updateVars.Items {
+						if ev.Key == v.Key {
+							updateVar = ev
+							break
+						}
+					}
+					
+					if updateVar == nil {
+						return fmt.Errorf("variable %q not found for update", v.Key)
+					}
+					
+					_, updateErr := client.Variables.Update(ctx, w.ID, updateVar.ID, tfe.VariableUpdateOptions{
+						Value:       &valueStr,
+						Description: v.Description,
+						HCL:         v.HCL,
+						Sensitive:   v.Sensitive,
+					})
+					if updateErr != nil {
+						return fmt.Errorf("could not update variable %q: %w", v.Key, updateErr)
+					}
+					fmt.Printf("Updated variable %q\n", v.Key)
 				} else {
-					fmt.Printf("Created variable %q\n", v.Key)
+					return fmt.Errorf("could not create variable %q: %w", v.Key, err)
 				}
 			} else {
-				// Some other error occurred, return it
-				return fmt.Errorf("error reading variable %q: %w", v.Key, err)
+				fmt.Printf("Created variable %q\n", v.Key)
 			}
 		} else {
 			// Variable exists, update it

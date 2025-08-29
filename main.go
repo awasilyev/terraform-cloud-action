@@ -173,25 +173,44 @@ func run(ctx context.Context, args []string) error {
 					sensitive = *v.Sensitive
 				}
 				
-				// Try with all fields explicitly set (matching the test examples)
-				createOpts := tfe.VariableCreateOptions{
-					Key:       &v.Key,
-					Value:     &valueStr,
-					Category:  &category,
-					HCL:       &hcl,
-					Sensitive: &sensitive,
+				// Try with minimal fields first to isolate the issue
+				fmt.Printf("Debug: Attempting minimal variable creation...\n")
+				minimalOpts := tfe.VariableCreateOptions{
+					Key:      &v.Key,
+					Value:    &valueStr,
+					Category: &category,
 				}
 				
-				// Add description if provided
-				if v.Description != nil {
-					createOpts.Description = v.Description
+				// Try minimal creation first
+				_, minimalErr := client.Variables.Create(ctx, w.ID, minimalOpts)
+				if minimalErr != nil {
+					fmt.Printf("Debug: Minimal creation failed: %v\n", minimalErr)
+					
+					// Now try with full options
+					fmt.Printf("Debug: Attempting full variable creation...\n")
+					createOpts := tfe.VariableCreateOptions{
+						Key:       &v.Key,
+						Value:     &valueStr,
+						Category:  &category,
+						HCL:       &hcl,
+						Sensitive: &sensitive,
+					}
+					
+					// Add description if provided
+					if v.Description != nil {
+						createOpts.Description = v.Description
+					}
+					
+					// Debug: show final create options
+					fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
+						*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
+					
+					_, err = client.Variables.Create(ctx, w.ID, createOpts)
+				} else {
+					fmt.Printf("Debug: Minimal creation succeeded!\n")
+					err = nil
 				}
 				
-				// Debug: show final create options
-				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q, HCL=%v, Sensitive=%v\n", 
-					*createOpts.Key, *createOpts.Value, *createOpts.Category, *createOpts.HCL, *createOpts.Sensitive)
-				
-				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {
 					// Debug: show detailed error information
 					fmt.Printf("Debug: Create error details: %T: %v\n", err, err)

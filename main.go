@@ -85,6 +85,12 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not decode json-vars. Make sure that this is a key-value dictionary of vars to be set: %w", err)
 	}
 
+	// Debug: show what we parsed
+	fmt.Printf("Debug: Parsed %d variables from JSON input\n", len(vars))
+	for i, v := range vars {
+		fmt.Printf("Debug: Variable %d: Key=%q, Value=%v (type: %T)\n", i, v.Key, v.Value, v.Value)
+	}
+
 	// Build client
 	cfg := tfe.DefaultConfig()
 	cfg.Address = url
@@ -117,6 +123,10 @@ func run(ctx context.Context, args []string) error {
 				// Convert value to string for TFE
 				valueStr := convertValueToString(v.Value)
 				
+				// Debug: show what we're trying to create
+				fmt.Printf("Debug: Creating variable %q with value: %q (type: %T)\n", v.Key, valueStr, v.Value)
+				fmt.Printf("Debug: Description: %v, HCL: %v, Sensitive: %v\n", v.Description, v.HCL, v.Sensitive)
+				
 				// Build create options with proper nil handling
 				createOpts := tfe.VariableCreateOptions{
 					Key:       &v.Key,
@@ -134,6 +144,9 @@ func run(ctx context.Context, args []string) error {
 				if v.Sensitive != nil {
 					createOpts.Sensitive = v.Sensitive
 				}
+				
+				// Debug: show final create options
+				fmt.Printf("Debug: Final create options: Key=%q, Value=%q, Category=%q\n", *createOpts.Key, *createOpts.Value, *createOpts.Category)
 				
 				_, err = client.Variables.Create(ctx, w.ID, createOpts)
 				if err != nil {

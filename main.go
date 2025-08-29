@@ -134,18 +134,38 @@ func run(ctx context.Context, args []string) error {
 	// Debug: check workspace state and permissions
 	fmt.Printf("Debug: Workspace Locked: %v\n", w.Locked)
 	fmt.Printf("Debug: Workspace Auto Apply: %v\n", w.AutoApply)
+	
+	// Debug: check if workspace has any special constraints
+	fmt.Printf("Debug: Workspace Operations: %v\n", w.Operations)
+	fmt.Printf("Debug: Workspace Execution Mode: %s\n", w.ExecutionMode)
+	fmt.Printf("Debug: Workspace Terraform Version: %s\n", w.TerraformVersion)
+	
+	// Debug: try to get current state version to see workspace status
+	if w.CurrentStateVersion != nil {
+		fmt.Printf("Debug: Current State Version: %s\n", w.CurrentStateVersion.ID)
+	} else {
+		fmt.Printf("Debug: No current state version\n")
+	}
 
 	// Update the workspace vars
 	for _, v := range vars {
-		// First try to read the existing variable
-		_, err := client.Variables.Read(ctx, w.ID, v.Key)
-		if err != nil {
-			// Debug: let's see what the actual error is
-			fmt.Printf("Debug: Read error for variable %q: %v\n", v.Key, err)
-			
-			// Check if the error indicates the variable doesn't exist
-			// TFE typically returns a 404 or specific error for non-existent variables
-			if isVariableNotFoundError(err) {
+		// Check if variable exists by listing variables and searching for the key
+		existingVars, listErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
+		if listErr != nil {
+			fmt.Printf("Debug: Could not list variables: %v\n", listErr)
+			return fmt.Errorf("could not list variables: %w", listErr)
+		}
+		
+		// Search for existing variable with this key
+		var existingVar *tfe.Variable
+		for _, ev := range existingVars.Items {
+			if ev.Key == v.Key {
+				existingVar = ev
+				break
+			}
+		}
+		
+		if existingVar == nil {
 				// Variable doesn't exist, create it
 				
 				// Convert value to string for TFE
@@ -202,7 +222,25 @@ func run(ctx context.Context, args []string) error {
 					if err.Error() == "Key has already been taken" {
 						// Variable was created by another process, try to update it instead
 						fmt.Printf("Variable %q already exists, updating instead\n", v.Key)
-						_, updateErr := client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
+						// We need to get the variable ID first since Update requires it
+						updateVars, updateListErr := client.Variables.List(ctx, w.ID, &tfe.VariableListOptions{})
+						if updateListErr != nil {
+							return fmt.Errorf("could not list variables for update: %w", updateListErr)
+						}
+						
+						var updateVar *tfe.Variable
+						for _, ev := range updateVars.Items {
+							if ev.Key == v.Key {
+								updateVar = ev
+								break
+							}
+						}
+						
+						if updateVar == nil {
+							return fmt.Errorf("variable %q not found for update", v.Key)
+						}
+						
+						_, updateErr := client.Variables.Update(ctx, w.ID, updateVar.ID, tfe.VariableUpdateOptions{
 							Value:       &valueStr,
 							Description: v.Description,
 							HCL:         v.HCL,
@@ -225,7 +263,7 @@ func run(ctx context.Context, args []string) error {
 		} else {
 			// Variable exists, update it
 			valueStr := convertValueToString(v.Value)
-			_, err = client.Variables.Update(ctx, w.ID, v.Key, tfe.VariableUpdateOptions{
+			_, err = client.Variables.Update(ctx, w.ID, existingVar.ID, tfe.VariableUpdateOptions{
 				Value:       &valueStr,
 				Description: v.Description,
 				HCL:         v.HCL,

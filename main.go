@@ -94,8 +94,6 @@ type workspaceVar struct {
 	Category    *string     `json:"category"`
 }
 
-
-
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
@@ -112,15 +110,11 @@ func parseVars() ([]workspaceVar, error) {
 	return ret, err
 }
 
-
-
 func run(ctx context.Context, args []string) error {
 	vars, err := parseVars()
 	if err != nil {
 		return fmt.Errorf("could not decode json-vars. Make sure that this is a key-value dictionary of vars to be set: %w", err)
 	}
-
-
 
 	// Build client
 	cfg := tfe.DefaultConfig()
@@ -272,8 +266,6 @@ func run(ctx context.Context, args []string) error {
 		}
 	}
 
-
-
 	// Use the latest configuration version instead of creating a new one
 	cv, err := client.ConfigurationVersions.List(ctx, w.ID, &tfe.ConfigurationVersionListOptions{})
 	if err != nil {
@@ -322,7 +314,6 @@ func run(ctx context.Context, args []string) error {
 		case <-time.After(maximumTimeout):
 			return fmt.Errorf("run timed out")
 		case <-time.After(time.Second * 5):
-			fmt.Println("Checking in on run status...")
 			checkin, err := client.Runs.Read(ctx, r.ID)
 			if err != nil {
 				return fmt.Errorf("unable to find run %q: %w", r.ID, err)

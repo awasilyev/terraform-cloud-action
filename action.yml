@@ -33,7 +33,7 @@ outputs:
     description: "The URL to view the run"
 runs:
   using: "docker"
-  image: "ghcr.io/awasilyev/terraform-cloud-action:latest"
+  image: "docker://ghcr.io/awasilyev/terraform-cloud-action:latest"
 branding:
   color: blue
   icon: upload-cloud

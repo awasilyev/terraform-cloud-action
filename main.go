@@ -91,7 +91,10 @@ type workspaceVar struct {
 	Description *string     `json:"description"`
 	HCL         *bool       `json:"hcl"`
 	Sensitive   *bool       `json:"sensitive"`
+	Category    *string     `json:"category"`
 }
+
+
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -109,11 +112,15 @@ func parseVars() ([]workspaceVar, error) {
 	return ret, err
 }
 
+
+
 func run(ctx context.Context, args []string) error {
 	vars, err := parseVars()
 	if err != nil {
 		return fmt.Errorf("could not decode json-vars. Make sure that this is a key-value dictionary of vars to be set: %w", err)
 	}
+
+
 
 	// Build client
 	cfg := tfe.DefaultConfig()
@@ -138,12 +145,21 @@ func run(ctx context.Context, args []string) error {
 			return fmt.Errorf("could not list variables: %w", listErr)
 		}
 
-		// Search for existing variable with this key
+		// Search for existing variable with this key and category
 		var existingVar *tfe.Variable
 		for _, ev := range existingVars.Items {
 			if ev.Key == v.Key {
-				existingVar = ev
-				break
+				// If category is specified, also check category match
+				if v.Category != nil {
+					if ev.Category == tfe.CategoryType(*v.Category) {
+						existingVar = ev
+						break
+					}
+				} else {
+					// If no category specified, match any category
+					existingVar = ev
+					break
+				}
 			}
 		}
 
@@ -174,9 +190,14 @@ func run(ctx context.Context, args []string) error {
 			createOpts := tfe.VariableCreateOptions{
 				Key:       tfe.String(v.Key),
 				Value:     tfe.String(valueStr),
-				Category:  tfe.Category(tfe.CategoryTerraform),
+				Category:  tfe.Category(tfe.CategoryTerraform), // Default to terraform category
 				HCL:       tfe.Bool(hcl),
 				Sensitive: tfe.Bool(sensitive),
+			}
+
+			// Override category if specified
+			if v.Category != nil {
+				createOpts.Category = tfe.Category(tfe.CategoryType(*v.Category))
 			}
 
 			// Add description if provided
@@ -209,12 +230,17 @@ func run(ctx context.Context, args []string) error {
 						return fmt.Errorf("variable %q not found for update", v.Key)
 					}
 
-					_, updateErr := client.Variables.Update(ctx, w.ID, updateVar.ID, tfe.VariableUpdateOptions{
+					updateOpts := tfe.VariableUpdateOptions{
 						Value:       &valueStr,
 						Description: v.Description,
 						HCL:         v.HCL,
 						Sensitive:   v.Sensitive,
-					})
+					}
+					if v.Category != nil {
+						category := tfe.CategoryType(*v.Category)
+						updateOpts.Category = &category
+					}
+					_, updateErr := client.Variables.Update(ctx, w.ID, updateVar.ID, updateOpts)
 					if updateErr != nil {
 						return fmt.Errorf("could not update variable %q: %w", v.Key, updateErr)
 					}
@@ -228,18 +254,25 @@ func run(ctx context.Context, args []string) error {
 		} else {
 			// Variable exists, update it
 			valueStr := convertValueToString(v.Value)
-			_, err = client.Variables.Update(ctx, w.ID, existingVar.ID, tfe.VariableUpdateOptions{
+			updateOpts := tfe.VariableUpdateOptions{
 				Value:       &valueStr,
 				Description: v.Description,
 				HCL:         v.HCL,
 				Sensitive:   v.Sensitive,
-			})
+			}
+			if v.Category != nil {
+				category := tfe.CategoryType(*v.Category)
+				updateOpts.Category = &category
+			}
+			_, err = client.Variables.Update(ctx, w.ID, existingVar.ID, updateOpts)
 			if err != nil {
 				return fmt.Errorf("could not update variable %q: %w", v.Key, err)
 			}
 			fmt.Printf("Updated variable %q\n", v.Key)
 		}
 	}
+
+
 
 	// Use the latest configuration version instead of creating a new one
 	cv, err := client.ConfigurationVersions.List(ctx, w.ID, &tfe.ConfigurationVersionListOptions{})

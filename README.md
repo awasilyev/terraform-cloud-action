@@ -29,7 +29,9 @@ with:
   json-vars: "[{'key': 'foo', 'value': 'bar'}, {'key': 'baz', 'value': 'guz'}]"
 ```
 
-Additional properties such as `sensitive` and `hcl` are also available. See the documentation on [VariableUpdateOptions](https://pkg.go.dev/github.com/hashicorp/go-tfe#VariableUpdateOptions) for details.
+Additional properties such as `sensitive`, `hcl`, and `category` are also available. The `category` field can be set to `"terraform"` (default) for Terraform variables or `"env"` for environment variables. See the documentation on [VariableUpdateOptions](https://pkg.go.dev/github.com/hashicorp/go-tfe#VariableUpdateOptions) for details.
+
+
 
 ### `message`
 
@@ -82,4 +84,13 @@ with:
   tfe-token: ${{ secrets.TFE_TOKEN }}
   organization: "your-org"
   workspace: "your-workspace"
+```
+
+```yml
+uses: awasilyev/terraform-cloud-action@v1
+with:
+  tfe-token: ${{ secrets.TFE_TOKEN }}
+  organization: "your-org"
+  workspace: "your-workspace"
+  json-vars: "[{'key': 'image_tag', 'value': '${{ github.sha }}'}, {'key': 'AWS_ACCESS_KEY_ID', 'value': '${{ secrets.AWS_ACCESS_KEY_ID }}', 'category': 'env'}, {'key': 'TF_LOG', 'value': 'INFO', 'category': 'env'}]"
 ```

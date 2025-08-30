@@ -69,9 +69,8 @@ func containsHCLSyntax(value string) bool {
 
 // appendToFile appends a key-value pair to the GITHUB_OUTPUT file
 func appendToFile(filename, key, value string) error {
-	// Generate a unique delimiter that won't appear in the value
-	delimiter := fmt.Sprintf("DELIMITER_%s_%d", key, time.Now().UnixNano())
-	content := fmt.Sprintf("%s<<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
+	// Use simple key=value format for single-line outputs
+	content := fmt.Sprintf("%s=%s\n", key, value)
 
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

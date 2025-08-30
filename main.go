@@ -29,13 +29,13 @@ func isVariableNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// Check for common TFE "not found" error patterns
 	errStr := err.Error()
-	return errStr == "resource not found" || 
-		   errStr == "variable not found" ||
-		   errStr == "404" ||
-		   errStr == "not found"
+	return errStr == "resource not found" ||
+		errStr == "variable not found" ||
+		errStr == "404" ||
+		errStr == "not found"
 }
 
 // convertValueToString converts the interface{} value to a string for TFE
@@ -59,32 +59,30 @@ func convertValueToString(value interface{}) string {
 // containsHCLSyntax detects if a string value contains HCL syntax
 func containsHCLSyntax(value string) bool {
 	// Check for common HCL patterns
-	return strings.Contains(value, "[") || 
-		   strings.Contains(value, "]") || 
-		   strings.Contains(value, "{") || 
-		   strings.Contains(value, "}") ||
-		   strings.Contains(value, "=") ||
-		   strings.Contains(value, ",")
+	return strings.Contains(value, "[") ||
+		strings.Contains(value, "]") ||
+		strings.Contains(value, "{") ||
+		strings.Contains(value, "}") ||
+		strings.Contains(value, "=") ||
+		strings.Contains(value, ",")
 }
 
 // appendToFile appends a key-value pair to the GITHUB_OUTPUT file
 func appendToFile(filename, key, value string) error {
-	// Format: key<<<DELIMITER
-	// value
-	// DELIMITER
-	delimiter := "EOF"
+	// Generate a unique delimiter that won't appear in the value
+	delimiter := fmt.Sprintf("DELIMITER_%s_%d", key, time.Now().UnixNano())
 	content := fmt.Sprintf("%s<<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
-	
+
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open output file: %w", err)
 	}
 	defer file.Close()
-	
+
 	if _, err := file.WriteString(content); err != nil {
 		return fmt.Errorf("failed to write to output file: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -140,7 +138,7 @@ func run(ctx context.Context, args []string) error {
 		if listErr != nil {
 			return fmt.Errorf("could not list variables: %w", listErr)
 		}
-		
+
 		// Search for existing variable with this key
 		var existingVar *tfe.Variable
 		for _, ev := range existingVars.Items {
@@ -149,13 +147,13 @@ func run(ctx context.Context, args []string) error {
 				break
 			}
 		}
-		
+
 		if existingVar == nil {
 			// Variable doesn't exist, create it
-			
+
 			// Convert value to string for TFE
 			valueStr := convertValueToString(v.Value)
-			
+
 			// Detect if this should be treated as HCL (complex values with brackets, braces, etc.)
 			isHCL := false
 			if v.HCL != nil {
@@ -165,14 +163,14 @@ func run(ctx context.Context, args []string) error {
 				valueStr := convertValueToString(v.Value)
 				isHCL = containsHCLSyntax(valueStr)
 			}
-			
+
 			// Set default values for all fields (matching the test pattern)
 			hcl := isHCL
 			sensitive := false
 			if v.Sensitive != nil {
 				sensitive = *v.Sensitive
 			}
-			
+
 			// Create variable with TFE helper functions
 			createOpts := tfe.VariableCreateOptions{
 				Key:       tfe.String(v.Key),
@@ -181,14 +179,14 @@ func run(ctx context.Context, args []string) error {
 				HCL:       tfe.Bool(hcl),
 				Sensitive: tfe.Bool(sensitive),
 			}
-			
+
 			// Add description if provided
 			if v.Description != nil {
 				createOpts.Description = v.Description
 			}
-			
+
 			_, err = client.Variables.Create(ctx, w.ID, createOpts)
-			
+
 			if err != nil {
 				// Check if the error is due to the variable already existing
 				if err.Error() == "Key has already been taken" {
@@ -199,7 +197,7 @@ func run(ctx context.Context, args []string) error {
 					if updateListErr != nil {
 						return fmt.Errorf("could not list variables for update: %w", updateListErr)
 					}
-					
+
 					var updateVar *tfe.Variable
 					for _, ev := range updateVars.Items {
 						if ev.Key == v.Key {
@@ -207,11 +205,11 @@ func run(ctx context.Context, args []string) error {
 							break
 						}
 					}
-					
+
 					if updateVar == nil {
 						return fmt.Errorf("variable %q not found for update", v.Key)
 					}
-					
+
 					_, updateErr := client.Variables.Update(ctx, w.ID, updateVar.ID, tfe.VariableUpdateOptions{
 						Value:       &valueStr,
 						Description: v.Description,

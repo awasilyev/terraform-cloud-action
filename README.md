@@ -57,12 +57,29 @@ The ID of the created run.
 
 The URL to view the run.
 
+## Docker Image
+
+This action now uses a pre-built Docker image from GitHub Container Registry (ghcr.io) instead of building from source. The image is automatically built and pushed on:
+
+- **Push to main/master branch**: Creates `ghcr.io/awasilyev/terraform-cloud-action:main` tag
+- **Pull requests**: Creates branch-specific tags for testing
+- **Releases**: Creates versioned tags (e.g., `ghcr.io/awasilyev/terraform-cloud-action:v1.0.0`)
+
+### Build Workflows
+
+The repository includes two GitHub Actions workflows:
+
+1. **`.github/workflows/build-and-push.yml`**: Builds and pushes images on every push and pull request
+2. **`.github/workflows/release.yml`**: Builds and pushes versioned images when releases are published
+
+These workflows use GitHub's built-in container registry authentication and caching for efficient builds.
+
 ## Example usage
 
 ```yml
-uses: taiidani/terraform-cloud-action@v1
+uses: awasilyev/terraform-cloud-action@v1
 with:
   tfe-token: ${{ secrets.TFE_TOKEN }}
-  organization: "taiidani"
-  workspace: "tfc-workspace"
+  organization: "your-org"
+  workspace: "your-workspace"
 ```

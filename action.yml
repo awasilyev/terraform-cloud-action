@@ -1,5 +1,5 @@
 name: "Terraform Cloud trigger run"
-description: "Trigger a Terraform Cloud run"
+description: "Trigger a Terraform Cloud run using tfh utility"
 inputs:
   tfe-token:
     description: "The API token granting access to communicate with Terraform Cloud"
@@ -32,8 +32,73 @@ outputs:
   run-url:
     description: "The URL to view the run"
 runs:
-  using: "docker"
-  image: "docker://ghcr.io/awasilyev/terraform-cloud-action:main"
+  using: "composite"
+  steps:
+    - name: Install tfh
+      shell: bash
+      run: |
+        curl -sL https://github.com/hashicorp-community/tf-helper/archive/refs/tags/v0.2.9.tar.gz|tar -zxf -
+        echo "$(pwd)/tf-helper-0.2.9/tfh/bin" >> $GITHUB_PATH
+
+    - name: Set workspace variables
+      shell: bash
+      if: inputs.json-vars != '[]'            
+      run: |
+        # Set all variables using curl and Terraform Cloud API
+        echo "${{ inputs.json-vars }}" | jq -r 'to_entries[] | {
+          "type": "vars",
+          "attributes": {
+            "key": .key,
+            "value": .value,
+            "category": "terraform"
+          }
+        }' | jq -s '{data: .}' | curl -sf -X POST \
+          -H "Authorization: Bearer ${{ inputs.tfe-token }}" \
+          -H "Content-Type: application/vnd.api+json" \
+          -d @- \
+          "${{ inputs.url }}/api/v2/organizations/${{ inputs.organization }}/workspaces/${{ inputs.workspace }}/vars"
+        
+    - name: Trigger Terraform run
+      shell: bash
+      id: trigger-run
+      run: |
+        # Trigger terraform run and capture the run ID
+        RUN=$(tfh pushconfig -current-config true -message "${{ inputs.message }}" | cut -d " " -f2)
+        echo "run-id=$RUN" >> $GITHUB_OUTPUT
+        echo "run-url=${{ inputs.url }}/app/${{ inputs.organization }}/workspaces/${{ inputs.workspace }}/runs/$RUN" >> $GITHUB_OUTPUT
+        
+    - name: Wait for run completion
+      shell: bash
+      if: inputs.wait == 'true'
+      run: |
+        RUN="${{ steps.trigger-run.outputs.run-id }}"
+        i=0
+        while [ $i -le 360 ]; do
+          while ! tfh run show ${RUN} > status; do sleep 15; done
+          if grep "applied" status; then 
+            echo "Run completed successfully - applied"
+            break
+          fi
+          if grep "planned_and_finished" status; then 
+            echo "Run completed successfully - planned and finished"
+            break
+          fi
+          if grep "failed" status; then 
+            echo "Run failed"
+            exit 1
+          fi
+          if grep "errored" status; then 
+            echo "Run errored"
+            exit 1
+          fi
+          i=$(( $i + 1 ))
+          sleep 10
+        done
+        
+        if [ $i -gt 360 ]; then
+          echo "Run timed out after 1 hour"
+          exit 1
+        fi
 branding:
   color: blue
   icon: upload-cloud
